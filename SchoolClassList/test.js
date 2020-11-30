@@ -1,29 +1,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const request = require('request');
 const cheerio = require('cheerio');
 const os = require('os');
 require('chromedriver'); //导入chrome浏览器 driver
 const chrome = require('selenium-webdriver/chrome');
 const webdriver = require('selenium-webdriver'); //导入selenium 库
-
-
-
-const argAcc = process.argv[2];
-const argPwd = process.argv[3];
-
+const config = require('./config');
 //const outdir = process.argv[3];0
-async function  requestFunc(iReq , iOptions) {
-    return new Promise ((resolve) => {
-        iReq (iOptions , function (err , res , body) {
-            if (err) {
-                return resolve(false);
-            }
-            return resolve(body);
-        })
-    });
-}
 /**
  * 
  * @param {WebDriver} iDriver 
@@ -35,6 +19,7 @@ async function seleSchoolLogin (iDriver , acc , pwd) {
         try {
             iDriver.get("http://system8.ntunhs.edu.tw/myNTUNHS_student/Modules/Main/Index_student.aspx?timeout=false") //打开https://autowebtest.github.io/
             iDriver.sleep(100);
+            await iDriver.wait(webdriver.until.elementLocated({id : 'ctl00_loginModule1_txtLOGINID'}) , 15000);
             let inputAcc = await iDriver.findElement({id:'ctl00_loginModule1_txtLOGINID'});
             let inputPwd = await iDriver.findElement({id:'ctl00_loginModule1_txtLOGINPWD'});
             await inputAcc.clear();
@@ -44,6 +29,13 @@ async function seleSchoolLogin (iDriver , acc , pwd) {
             await inputPwd.sendKeys(pwd);
             let submitBtn = await iDriver.findElement({id:'btnLogin'});
             await submitBtn.click();
+            await iDriver.sleep(1000);
+            try {
+                let selectIden = await iDriver.findElement({id : 'ddlSystype'});
+                await iDriver.executeScript(`$("#ctl00_loginModule1_hidSystype").val("student").change();`);
+                await iDriver.executeScript(`$("#ddlSystype").val("student").change();`);
+                await submitBtn.click();
+            } catch (e) { }
             return resolve([true , iDriver]);
         } catch (e) {
             console.log(e);
@@ -53,13 +45,13 @@ async function seleSchoolLogin (iDriver , acc , pwd) {
     //iDriver.quit();
 }
 
-async function selemiumGoToClassList (iDriver) {
+async function selemiumGoToClassList (iDriver ,eduSys) {
     await iDriver.sleep(1000);
     await iDriver.navigate().to('http://system8.ntunhs.edu.tw/myNTUNHS_student/Modules/Profile/qry/Profile_qry_27.aspx');
     let queryFrame = await iDriver.findElement({id : 'ctl00_ContentPlaceHolderQuery_QueryFrame'});
     let detailFrame = await iDriver.findElement({id : 'ctl00_ContentPlaceHolderList_ListFrame'});
     await iDriver.switchTo().frame(queryFrame);
-    await iDriver.wait(webdriver.until.elementLocated({id : 'rdoEduSys_1'}) , 15000).click();
+    await iDriver.wait(webdriver.until.elementLocated({id : eduSys}) , 15000).click();
     await iDriver.sleep(500);
     let source = await iDriver.getPageSource();
     let $ = cheerio.load(source);
@@ -105,12 +97,21 @@ async function selemiumGoToClassList (iDriver) {
     }
 }
 
+const argAcc = config.account;
+const argPwd = config.password;
+const rdoEduSys = config.rdoEduSys;
 async function main() {
     let opt = new chrome.Options();
     opt.addArguments('--incognito');
     let driver = await new webdriver.Builder().forBrowser('chrome').setChromeOptions(opt).build(); //创建一个chrome 浏览器实例
     fs.writeFileSync('測試.csv','');
     await seleSchoolLogin(driver,argAcc,argPwd);
-    await selemiumGoToClassList(driver);
+    for (let item of rdoEduSys) {
+        await selemiumGoToClassList( driver,item);
+    }
+    console.log("抓取完成");
+    driver.quit();
 }
+
+
 main();
